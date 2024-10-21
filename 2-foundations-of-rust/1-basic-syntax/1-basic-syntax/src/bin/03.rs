@@ -3,5 +3,5 @@ fn main() {
 
     // TODO
 
-    println!("{} is largest and {} is smallest");
+    println!("{} is largest and {} is smallest", input[5], input[6]);
 }
