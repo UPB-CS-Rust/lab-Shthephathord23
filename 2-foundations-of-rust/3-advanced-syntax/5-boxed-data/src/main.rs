@@ -16,14 +16,14 @@ enum Expr {
     Const(i64),
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),  // New variant for multiplication
+    Div(Box<Expr>, Box<Expr>),  // New variant for division
     Var,
     Summation(Vec<Expr>),
 }
 
 // inject these two identifiers directly into the current namespace
-use Expr::Const;
-use Expr::Summation;
-use Expr::Var;
+use Expr::{Const, Summation, Var};
 
 // These are convenience functions, so you don't have to type "Box::new" as often
 // when building test-data types
@@ -36,30 +36,37 @@ fn sub(x: Expr, y: Expr) -> Expr {
 }
 
 fn mul(x: Expr, y: Expr) -> Expr {
-    todo!()
+    Expr::Mul(Box::new(x), Box::new(y))
 }
 
 fn div(x: Expr, y: Expr) -> Expr {
-    todo!()
+    Expr::Div(Box::new(x), Box::new(y))
 }
 
 // ...
 
-fn eval(expr: &Expr, var: i64) -> i64 {
-    // this should return an Option<i64>
+fn eval(expr: &Expr, var: i64) -> Option<i64> {
     use Expr::*;
     match expr {
-        Const(k) => *k,
-        Var => var,
-        Add(lhs, rhs) => eval(lhs, var) + eval(rhs, var),
-        Sub(lhs, rhs) => eval(lhs, var) - eval(rhs, var),
-
+        Const(k) => Some(*k),
+        Var => Some(var),
+        Add(lhs, rhs) => Some(eval(lhs, var)? + eval(rhs, var)?),
+        Sub(lhs, rhs) => Some(eval(lhs, var)? - eval(rhs, var)?),
+        Mul(lhs, rhs) => Some(eval(lhs, var)? * eval(rhs, var)?),
+        Div(lhs, rhs) => {
+            let divisor = eval(rhs, var)?;
+            if divisor == 0 {
+                None // Division by zero
+            } else {
+                Some(eval(lhs, var)? / divisor)
+            }
+        },
         Summation(exprs) => {
             let mut acc = 0;
             for e in exprs {
-                acc += eval(e, var);
+                acc += eval(e, var)?;
             }
-            acc
+            Some(acc)
         }
     }
 }
@@ -67,20 +74,19 @@ fn eval(expr: &Expr, var: i64) -> i64 {
 fn main() {
     let test = |expr| {
         let value = rand::random::<i8>() as i64;
-        println!(
-            "{:?} with Var = {} ==> {}",
-            &expr,
-            value,
-            eval(&expr, value)
-        );
+        match eval(&expr, value) {
+            Some(result) => println!("{:?} with Var = {} ==> {}", &expr, value, result),
+            None => println!("{:?} with Var = {} ==> Division by zero error", &expr, value),
+        }
     };
 
     test(Const(5));
     test(Var);
     test(sub(Var, Const(5)));
-    test(sub(Var, Var));
+    test(mul(Var, Const(3)));
+    test(div(Var, Const(0))); // To test division by zero
     test(add(sub(Var, Const(5)), Const(5)));
-    test(Summation(vec![Var, Const(1)]));
+    test(Summation(vec![Var, Const(1), Const(2)]));
 }
 
 #[cfg(test)]
@@ -90,12 +96,15 @@ mod test {
     #[test]
     fn test_cases() {
         let x = 42;
-        assert_eq!(eval(&Const(5), x), 5);
-        assert_eq!(eval(&Var, x), 42);
-        assert_eq!(eval(&sub(Var, Const(5)), x), 37);
-        assert_eq!(eval(&sub(Var, Var), x), 0);
-        assert_eq!(eval(&add(sub(Var, Const(5)), Const(5)), x), 42);
-        assert_eq!(eval(&Summation(vec![Var, Const(1)]), x), 43);
+        assert_eq!(eval(&Const(5), x), Some(5));
+        assert_eq!(eval(&Var, x), Some(42));
+        assert_eq!(eval(&sub(Var, Const(5)), x), Some(37));
+        assert_eq!(eval(&mul(Var, Const(2)), x), Some(84));
+        assert_eq!(eval(&div(Var, Const(2)), x), Some(21));
+        assert_eq!(eval(&div(Var, Const(0)), x), None); // Division by zero
+        assert_eq!(eval(&sub(Var, Var), x), Some(0));
+        assert_eq!(eval(&add(sub(Var, Const(5)), Const(5)), x), Some(42));
+        assert_eq!(eval(&Summation(vec![Var, Const(1)]), x), Some(43));
     }
 }
 
